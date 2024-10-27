@@ -1,7 +1,6 @@
 import os
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
-from urllib.parse import quote as url_quote
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Set backend before importing pyplot
@@ -10,6 +9,7 @@ import mediapipe as mp
 import cv2
 import base64
 from io import BytesIO
+
 app = Flask(__name__)
 
 # Configure upload folder
@@ -49,9 +49,23 @@ def analyze_face(image_path):
         if not results.multi_face_landmarks:
             raise Exception("No face detected in the image")
 
-        # Select 15 main keypoints
-        key_points = [33, 133, 362, 263, 1, 61, 291, 199,
-                     94, 0, 24, 130, 359, 288, 378]
+        # Puntos específicos definidos por ti:
+        left_eye_points = [36, 37, 38]      # ojo izquierdo
+        right_eye_points = [42, 43, 44]     # ojo derecho
+        left_brow_points = [17, 21]          # ceja izquierda
+        right_brow_points = [22, 26]         # ceja derecha
+        mouth_points = [48, 51, 54, 57]      # boca
+        nose_point = [30]                    # nariz
+
+        # Combina todos los puntos en una sola lista
+        key_points = (
+            left_eye_points +
+            right_eye_points +
+            left_brow_points +
+            right_brow_points +
+            mouth_points +
+            nose_point
+        )
 
         height, width = gray_image.shape
         
@@ -136,3 +150,4 @@ def uploaded_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
