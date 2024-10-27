@@ -1,68 +1,138 @@
-from flask import Flask, render_template, request, send_file
 import os
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
+from urllib.parse import quote as url_quote
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Set backend before importing pyplot
+import matplotlib.pyplot as plt
+import mediapipe as mp
 import cv2
-import dlib
+import base64
 from io import BytesIO
-
-# Configurar flask y Google Drive
 app = Flask(__name__)
-UPLOAD_FOLDER = '/content/gdrive/MyDrive/Emotion+AI+Dataset/Emotion AI Dataset/'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Cargar el detector de rostros y el predictor de puntos faciales de dlib
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor('/content/gdrive/MyDrive/Emotion+AI+Dataset/Emotion AI Dataset/shape_predictor_68_face_landmarks.dat')
+# Configure upload folder
+UPLOAD_FOLDER = 'static/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Ensure upload directory exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def analyze_face(image_path):
+    try:
+        # Initialize MediaPipe Face Mesh
+        mp_face_mesh = mp.solutions.face_mesh
+        face_mesh = mp_face_mesh.FaceMesh(
+            static_image_mode=True,
+            max_num_faces=1,
+            min_detection_confidence=0.5
+        )
+
+        # Read image
+        image = cv2.imread(image_path)
+        if image is None:
+            raise Exception("Could not load image")
+
+        # Convert to RGB for MediaPipe
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Detect facial landmarks
+        results = face_mesh.process(rgb_image)
+
+        if not results.multi_face_landmarks:
+            raise Exception("No face detected in the image")
+
+        # Select 15 main keypoints
+        key_points = [33, 133, 362, 263, 1, 61, 291, 199,
+                     94, 0, 24, 130, 359, 288, 378]
+
+        height, width = gray_image.shape
+        
+        # Create a new figure for each analysis
+        plt.clf()
+        fig = plt.figure(figsize=(8, 8))
+        plt.imshow(gray_image, cmap='gray')
+
+        # Plot facial landmarks
+        for point_idx in key_points:
+            landmark = results.multi_face_landmarks[0].landmark[point_idx]
+            x = int(landmark.x * width)
+            y = int(landmark.y * height)
+            plt.plot(x, y, 'rx')
+
+        # Save plot to memory
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        buf.seek(0)
+        plt.close(fig)
+
+        # Convert to base64
+        image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        return image_base64
+
+    except Exception as e:
+        print(f"Error in analyze_face: {str(e)}")
+        raise
+    finally:
+        plt.close('all')
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def home():
+    # Get list of images in upload folder
+    images = []
+    for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+        if allowed_file(filename):
+            images.append(filename)
+    return render_template('index.html', images=images)
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if request.method == 'POST':
-        file = request.files['file']
-        if file:
-            # Guardar la imagen en la carpeta especificada en Google Drive
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    try:
+        # Check if we're analyzing an existing file
+        if 'existing_file' in request.form:
+            filename = request.form['existing_file']
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if not os.path.exists(filepath):
+                return jsonify({'error': f'File not found: {filename}'}), 404
+            
+        # Check if we're uploading a new file
+        elif 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'error': 'No file selected'}), 400
+            
+            if not allowed_file(file.filename):
+                return jsonify({'error': 'File type not allowed'}), 400
+            
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
+        
+        else:
+            return jsonify({'error': 'No file provided'}), 400
 
-            # Procesar la imagen para detectar puntos faciales
-            img = cv2.imread(filepath)
-            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            faces = detector(gray_img)
+        # Analyze the image
+        result_image = analyze_face(filepath)
+        
+        return jsonify({
+            'success': True,
+            'image': result_image
+        })
 
-            if len(faces) > 0:
-                face = faces[0]
-                landmarks = predictor(gray_img, face)
+    except Exception as e:
+        print(f"Error in /analyze: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-                # Puntos específicos definidos por ti:
-                left_eye_points = [36, 37, 38]  # ojo izquierdo
-                right_eye_points = [42, 43, 44]  # ojo derecho
-                left_brow_points = [17, 21]  # ceja izquierda
-                right_brow_points = [22, 26]  # ceja derecha
-                mouth_points = [48, 51, 54, 57]  # boca
-                nose_point = [30]  # nariz
+@app.route('/static/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-                def draw_x(img, x, y, size=8, color=(0, 0, 255), thickness=2):
-                    """Dibuja una 'X' en el punto (x, y) con mayor tamaño."""
-                    cv2.line(img, (x - size, y - size), (x + size, y + size), color, thickness)
-                    cv2.line(img, (x + size, y - size), (x - size, y + size), color, thickness)
-
-                # Dibujar las 'X' en los puntos faciales específicos
-                for i in left_eye_points + right_eye_points + left_brow_points + right_brow_points + mouth_points + nose_point:
-                    x = landmarks.part(i).x
-                    y = landmarks.part(i).y
-                    draw_x(img, x, y)  # Dibuja una "X" en los puntos
-
-            # Redimensionar la imagen a 600x600 píxeles
-            resized_img = cv2.resize(img, (600, 600))
-
-            # Guardar la imagen redimensionada en un buffer
-            _, buffer = cv2.imencode('.jpg', resized_img)
-            img_io = BytesIO(buffer)
-
-            # Mostrar la imagen con las "X" en los puntos faciales redimensionada a 600x600 px
-            return send_file(img_io, mimetype='image/jpeg')
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(debug=True)
