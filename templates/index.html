@@ -1,120 +1,142 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Análisis de Rasgos Faciales</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet"> <!-- Cambiado a Playfair Display -->
-    <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #f0f4f8;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: auto;
-            padding: 20px;
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 2.5rem;
-            font-family: 'Playfair Display', serif; /* Cambiado la fuente a Playfair Display */
-        }
-        h2 {
-            font-family: 'Playfair Display', serif; /* Cambiado la fuente de los subtítulos */
-        }
-        .upload-section {
-            background: #ffffff;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-top: 20px;
-        }
-        .upload-label {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 150px;
-            border: 2px dashed #6c757d;
-            border-radius: 10px;
-            transition: background 0.3s, border-color 0.3s;
-        }
-        .upload-label:hover {
-            background: #f1f1f1;
-            border-color: #495057;
-        }
-        .upload-input {
-            display: none;
-        }
-        .submit-button {
-            background-color: #77dd77; /* Verde pastel */
-            color: #fff;
-            padding: 8px 16px; /* Ajusté el tamaño del botón */
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9rem; /* Ajusté el tamaño de la fuente */
-            width: 150px; /* Hice el botón más pequeño */
-            transition: background 0.3s;
-            margin: 10px auto; /* Centrando el botón */
-            display: block; /* Asegurando que el botón sea un bloque */
-        }
-        .submit-button:hover {
-            background-color: #66bb66;
-        }
-        .result-image {
-            border: 2px solid #6c757d;
-            border-radius: 10px;
-            margin-top: 20px;
-            display: block;
-            max-width: 100%;
-        }
-        .error-message {
-            background-color: #dc3545;
-            color: #fff;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 20px;
-        }
-    </style>
+    <title>Rasgos Faciales</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Fuente elegante para los títulos -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="container">
-        <h1>Análisis de Rasgos Faciales</h1>
-
-        <!-- Existing Images Section -->
-        {% if images %}
-        <div class="mt-8">
-            <h2 class="text-2xl font-semibold mb-4">Imágenes Listas</h2>
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {% for image in images %}
-                <div class="relative group">
-                    <img src="{{ url_for('static', filename='uploads/' + image) }}" 
-                         alt="{{ image }}" 
-                         class="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
-                         onclick="analyzeExisting('{{ image }}')">
-                    <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 rounded-b-lg truncate">
-                        {{ image }}
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800" style="font-family: 'Playfair Display', serif;">Rasgos Faciales</h1>
+        
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-xl p-6">
+            <!-- Sección de Cargar Imagen -->
+            <div class="mb-8">
+                <form id="uploadForm" class="space-y-4">
+                    <div class="flex items-center justify-center w-full">
+                        <label class="flex flex-col w-full h-32 border-4 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 rounded-lg">
+                            <div class="flex flex-col items-center justify-center pt-7">
+                                <p class="pt-1 text-sm tracking-wider text-gray-400 group-hover:text-gray-500">Seleccionar</p>
+                            </div>
+                            <input type="file" class="opacity-0" name="file" accept=".jpg,.jpeg,.png" />
+                        </label>
                     </div>
-                </div>
-                {% endfor %}
+                    <button type="submit" class="w-full px-4 py-2 text-white bg-green-300 rounded-lg hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
+                        Analizar Rasgos
+                    </button>
+                </form>
             </div>
-        </div>
-        {% endif %}
 
-        <div class="upload-section">
-            <form id="uploadForm">
-                <label class="upload-label">
-                    <p class="text-gray-600 pt-1">Seleccionar imagen</p>
-                    <input type="file" class="upload-input" name="file" accept=".jpg,.jpeg,.png" />
-                </label>
-                <button type="submit" class="submit-button">Analizar</button>
-            </form>
-        </div>
+            <!-- Sección de Resultados -->
+            <div id="results" class="hidden">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-700" style="font-family: 'Playfair Display', serif;">Resultados</h2>
+                <div class="border border-gray-300 rounded-lg p-4 bg-gray-50">
+                    <img id="resultImage" class="max-w-full h-auto mx-auto" src="" alt="Resultado del análisis">
+                </div>
+            </div>
 
-        <div id="results" class="hidden">
+            <!-- Indicador de Carga -->
+            <div id="loading" class="hidden">
+                <div class="flex items-center justify-center p-4">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+                </div>
+            </div>
+
+            <!-- Sección de Errores -->
+            <div id="error" class="hidden mt-4 p-4 bg-red-100 border border-red-300 text-red-600 rounded-lg">
+            </div>
+
+            <!-- Sección de Imágenes Cargadas -->
+            {% if images %}
+            <div class="mt-8">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-700" style="font-family: 'Playfair Display', serif;">Imágenes cargadas</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {% for image in images %}
+                    <div class="relative group">
+                        <img src="{{ url_for('static', filename='uploads/' + image) }}" 
+                             alt="{{ image }}" 
+                             class="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
+                             onclick="analyzeExisting('{{ image }}')">
+                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-gray-200 text-xs p-1 rounded-b-lg truncate">
+                            {{ image }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function showLoading() {
+            $('#loading').removeClass('hidden');
+            $('#error').addClass('hidden');
+            $('#results').addClass('hidden');
+        }
+
+        function hideLoading() {
+            $('#loading').addClass('hidden');
+        }
+
+        $(document).ready(function() {
+            $('#uploadForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                var formData = new FormData(this);
+                showLoading();
+                
+                $.ajax({
+                    url: '/analyze',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function(response) {
+                        hideLoading();
+                        $('#results').removeClass('hidden');
+                        $('#resultImage').attr('src', 'data:image/png;base64,' + response.image);
+                    },
+                    error: function(xhr) {
+                        hideLoading();
+                        $('#error')
+                            .removeClass('hidden')
+                            .text(xhr.responseJSON?.error || 'An error occurred');
+                    }
+                });
+            });
+        });
+
+        function analyzeExisting(filename) {
+            showLoading();
+            
+            const formData = new FormData();
+            formData.append('existing_file', filename);
+            
+            $.ajax({
+                url: '/analyze',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function(response) {
+                    hideLoading();
+                    $('#results').removeClass('hidden');
+                    $('#resultImage').attr('src', 'data:image/png;base64,' + response.image);
+                },
+                error: function(xhr) {
+                    hideLoading();
+                    $('#error')
+                        .removeClass('hidden')
+                        .text(xhr.responseJSON?.error || 'An error occurred');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+
